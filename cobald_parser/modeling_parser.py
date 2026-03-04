@@ -10,7 +10,7 @@ from .utils import build_padding_mask
 
 
 class CobaldParser(PreTrainedModel):
-    """Morpho-Syntactic Parser.""""
+    """Morpho-Syntactic Parser."""
 
     config_class = CobaldParserConfig
 
