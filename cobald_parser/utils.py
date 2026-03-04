@@ -20,10 +20,6 @@ def _build_condition_mask(sentences: list[list[str]], condition_fn: callable, de
 def build_padding_mask(sentences: list[list[str]], device) -> Tensor:
     return _build_condition_mask(sentences, condition_fn=lambda word: True, device=device)
 
-def build_null_mask(sentences: list[list[str]], device) -> Tensor:
-    return _build_condition_mask(sentences, condition_fn=lambda word: word != "#NULL", device=device)
-
-
 def pairwise_mask(masks1d: Tensor) -> Tensor:
     """
     Calculate an outer product of a mask, i.e. masks2d[:, i, j] = masks1d[:, i] & masks1d[:, j].
@@ -40,30 +36,3 @@ def replace_masked_values(tensor: Tensor, mask: Tensor, replace_with: float):
     tensor.masked_fill_(~mask, replace_with)
 
 
-def prepend_cls(sentences: list[list[str]]) -> list[list[str]]:
-    """
-    Return a copy of sentences with [CLS] token prepended.
-    """
-    return [["[CLS]", *sentence] for sentence in sentences]
-
-def remove_nulls(sentences: list[list[str]]) -> list[list[str]]:
-    """
-    Return a copy of sentences with nulls removed.
-    """
-    return [[word for word in sentence if word != "#NULL"] for sentence in sentences]
-
-def add_nulls(sentences: list[list[str]], counting_mask) -> list[list[str]]:
-    """
-    Return a copy of sentences with nulls restored according to counting masks.
-    """
-    sentences_with_nulls = []
-    for sentence, counting_mask in zip(sentences, counting_mask, strict=True):
-        sentence_with_nulls = []
-        assert 0 < len(counting_mask)
-        # Account for leading (CLS) auxiliary token. 
-        sentence_with_nulls.extend(["#NULL"] * counting_mask[0])
-        for word, n_nulls_to_insert in zip(sentence, counting_mask[1:], strict=True):
-            sentence_with_nulls.append(word)
-            sentence_with_nulls.extend(["#NULL"] * n_nulls_to_insert)
-        sentences_with_nulls.append(sentence_with_nulls)
-    return sentences_with_nulls

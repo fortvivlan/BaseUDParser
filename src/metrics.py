@@ -52,16 +52,6 @@ def compute_metrics(
     result = {}
 
     current_position = 0
-    if "counting_masks" in columns:
-        # mask of non-padded values
-        mask = labels[current_position] != padding_value
-        result["null_f1"] = f1_score(
-            preds[current_position][mask],
-            labels[current_position][mask],
-            average='macro'
-        )
-        current_position += 1
-
     if "lemma_rules" in columns:
         mask = labels[current_position] != padding_value
         result["lemma_f1"] = f1_score(
@@ -88,35 +78,9 @@ def compute_metrics(
         )
         current_position += 1
 
-    if "deps_eud" in columns:
-        mask = labels[current_position] != padding_value
-        result["eud_jaccard"] = jaccard_score_vectorwise(
-            preds[current_position],
-            labels[current_position]
-        )
-        current_position += 1
-
     if "miscs" in columns:
         mask = labels[current_position] != padding_value
         result["miscs_f1"] = f1_score(
-            preds[current_position][mask],
-            labels[current_position][mask],
-            average='macro'
-        )
-        current_position += 1
-
-    if "deepslots" in columns:
-        mask = labels[current_position] != padding_value
-        result["deepslot_f1"] = f1_score(
-            preds[current_position][mask],
-            labels[current_position][mask],
-            average='macro'
-        )
-        current_position += 1
-
-    if "semclasses" in columns:
-        mask = labels[current_position] != padding_value
-        result["semclass_f1"] = f1_score(
             preds[current_position][mask],
             labels[current_position][mask],
             average='macro'

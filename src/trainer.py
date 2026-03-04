@@ -16,10 +16,9 @@ MODELCARD_TEMPLATE = """
 
 A transformer-based multihead parser for CoBaLD annotation.
 
-This model parses a pre-tokenized CoNLL-U text and jointly labels each token with three tiers of tags:
+This model parses a pre-tokenized CoNLL-U text and jointly labels each token with:
 * Grammatical tags (lemma, UPOS, XPOS, morphological features),
-* Syntactic tags (basic and enhanced Universal Dependencies),
-* Semantic tags (deep slot and semantic class).
+* Syntactic tags (basic Universal Dependencies).
 
 ## Model Sources
 
@@ -54,14 +53,10 @@ class CustomTrainer(Trainer):
 
         eval_results = []
         for metric_name, metric_type in (
-            ('Null F1', 'f1'),
             ('Lemma F1', 'f1'),
             ('Morphology F1', 'f1'),
             ('Ud Jaccard', 'accuracy'),
-            ('Eud Jaccard', 'accuracy'),
-            ('Miscs F1', 'f1'),
-            ('Deepslot F1', 'f1'),
-            ('Semclass F1', 'f1')
+            ('Miscs F1', 'f1')
         ):
             if metric_name in eval_results_plain:
                 eval_result = EvalResult(

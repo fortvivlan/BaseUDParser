@@ -1,7 +1,6 @@
 import json
 import itertools
 
-import numpy as np
 import torch
 from torch import LongTensor
 from datasets import (
@@ -18,7 +17,6 @@ from cobald_parser.utils import pad_sequences
 
 
 ROOT_HEAD = '0'
-NULL = "#NULL"
 
 # Sentence metadata
 SENT_ID = "sent_id"
@@ -35,19 +33,13 @@ HEAD = "head"
 DEPREL = "deprel"
 DEPS = "deps"
 MISC = "misc"
-DEEPSLOT = "deepslot"
-SEMCLASS = "semclass"
 
 # Transformed fields
-COUNTING_MASK = "counting_mask"
 LEMMA_RULE = "lemma_rule"
 JOINT_FEATS = "joint_feats"
 UD_ARC_FROM = "ud_arc_from"
 UD_ARC_TO = "ud_arc_to"
 UD_DEPREL = "ud_deprel"
-EUD_ARC_FROM = "eud_arc_from"
-EUD_ARC_TO = "eud_arc_to"
-EUD_DEPREL = "eud_deprel"
 
 
 def remove_range_tokens(sentence: dict) -> dict:
@@ -67,20 +59,9 @@ def remove_range_tokens(sentence: dict) -> dict:
     }
 
 
-def build_counting_mask(words: list[str]) -> np.array:
-    """
-    Count the number of nulls following each non-null token for a bunch of sentences.
-    `counting_mask[i] = N` means i-th non-null token is followed by N nulls.
-    
-    FIXME: move to tests
-    >>> words = ["#NULL", 'Quick', "#NULL", "#NULL", 'brown', 'fox', "#NULL"]
-    >>> build_counting_mask(words)
-    array([1, 2, 0, 1])
-    """
-    # -1 accounts for leading nulls and len(words) accounts for the trailing nulls.
-    nonnull_words_idxs = [-1] + [i for i, word in enumerate(words) if word != NULL] + [len(words)]
-    counting_mask = np.diff(nonnull_words_idxs) - 1
-    return counting_mask
+def build_counting_mask(words: list[str]) -> list:
+    """Build a dummy counting mask (all zeros, no nulls)."""
+    return [0] * len(words)
 
 
 def transform_fields(sentence: dict) -> dict:
@@ -88,12 +69,9 @@ def transform_fields(sentence: dict) -> dict:
     Transform sentence fields:
      * turn words and lemmas into lemma rules,
      * merge upos, xpos and feats into "pos-feats",
-     * encode ud syntax into a single 2d matrix,
-     * same for e-ud syntax.
+     * encode ud syntax into a single 2d matrix.
     """
     result = {}
-
-    result[COUNTING_MASK] = build_counting_mask(sentence[WORD])
 
     if LEMMA in sentence:
         result[LEMMA_RULE] = [
@@ -118,8 +96,8 @@ def transform_fields(sentence: dict) -> dict:
             )
         ]
 
-    # Renumerate ids, so that tokens are enumerated from 0 and #NULLs get integer id.
-    # E.g. [1, 1.1, 2] -> [0, 1, 2].
+    # Renumerate ids, so that tokens are enumerated from 0.
+    # E.g. [1, 2, 3] -> [0, 1, 2].
     id2idx = {token_id: token_idx for token_idx, token_id in enumerate(sentence[ID])}
 
     # Basic syntax.
@@ -127,14 +105,10 @@ def transform_fields(sentence: dict) -> dict:
         ud_arcs_from, ud_arcs_to, ud_deprels = zip(
             *[
                 (
-                    # Replace ROOT with self-loop, it simplifies dependency classifier
-                    # implementation a lot.
                     id2idx[str(head_id)] if str(head_id) != ROOT_HEAD else id2idx[token_id],
                     id2idx[token_id],
                     deprel
                 )
-                # head_id indicates ID of a token that an arc starts from, while
-                # token_id is an ID of a token the arcs leads to.
                 for token_id, head_id, deprel in zip(
                     sentence[ID],
                     sentence[HEAD],
@@ -147,29 +121,6 @@ def transform_fields(sentence: dict) -> dict:
         result[UD_ARC_FROM] = ud_arcs_from
         result[UD_ARC_TO] = ud_arcs_to
         result[UD_DEPREL] = ud_deprels
-
-    # Enhanced syntax.
-    if DEPS in sentence:
-        eud_arcs_from, eud_arcs_to, eud_deprels = zip(
-            *[
-                (
-                    # Same.
-                    id2idx[head_id] if head_id != ROOT_HEAD else id2idx[token_id],
-                    id2idx[token_id],
-                    deprel
-                )
-                for token_id, deps in zip(
-                    sentence[ID],
-                    sentence[DEPS],
-                    strict=True
-                )
-                for head_id, deprel in json.loads(deps).items()
-                if deps is not None
-            ]
-        )
-        result[EUD_ARC_FROM] = eud_arcs_from
-        result[EUD_ARC_TO] = eud_arcs_to
-        result[EUD_DEPREL] = eud_deprels
 
     return result
 
@@ -192,9 +143,6 @@ def build_schema_with_class_labels(tagsets: dict[str, set]) -> Features:
         WORD: Sequence(Value("string"))
     })
 
-    max_null_count = max(tagsets[COUNTING_MASK])
-    features[COUNTING_MASK] = Sequence(ClassLabel(num_classes=max_null_count + 1))
-
     if LEMMA_RULE in tagsets:
         # Sort to ensure consistent ordering of labels
         lemma_rule_tagset = sorted(tagsets[LEMMA_RULE])
@@ -207,26 +155,12 @@ def build_schema_with_class_labels(tagsets: dict[str, set]) -> Features:
     if UD_DEPREL in tagsets:
         features[UD_ARC_FROM] = Sequence(Value('int32'))
         features[UD_ARC_TO] = Sequence(Value('int32'))
-        eud_deprels_tagset = sorted(tagsets[UD_DEPREL])
-        features[UD_DEPREL] = Sequence(ClassLabel(names=eud_deprels_tagset))
-
-    if EUD_DEPREL in tagsets:
-        features[EUD_ARC_FROM] = Sequence(Value('int32'))
-        features[EUD_ARC_TO] = Sequence(Value('int32'))
-        eud_deprels_tagset = sorted(tagsets[EUD_DEPREL])
-        features[EUD_DEPREL] = Sequence(ClassLabel(names=eud_deprels_tagset))
+        ud_deprels_tagset = sorted(tagsets[UD_DEPREL])
+        features[UD_DEPREL] = Sequence(ClassLabel(names=ud_deprels_tagset))
 
     if MISC in tagsets:
         misc_tagset = sorted(tagsets[MISC])
         features[MISC] = Sequence(ClassLabel(names=misc_tagset))
-
-    if DEEPSLOT in tagsets:
-        deepslot_tagset = sorted(tagsets[DEEPSLOT])
-        features[DEEPSLOT] = Sequence(ClassLabel(names=deepslot_tagset))
-
-    if SEMCLASS in tagsets:
-        semclass_tagset = sorted(tagsets[SEMCLASS])
-        features[SEMCLASS] = Sequence(ClassLabel(names=semclass_tagset))
 
     return features
 
@@ -293,9 +227,6 @@ def collate_with_padding(batches: list[dict], padding_value: int = -100) -> dict
         "texts": gather_column(TEXT)
     }
 
-    counting_masks_batched = stack_padded(COUNTING_MASK)
-    result["counting_masks"] = maybe_none(counting_masks_batched)
-
     columns = {column for batch in batches for column in batch}
     if LEMMA_RULE in columns:
         lemma_rules_batched = stack_padded(LEMMA_RULE)
@@ -309,20 +240,8 @@ def collate_with_padding(batches: list[dict], padding_value: int = -100) -> dict
         deps_ud_batched = collate_syntax(UD_ARC_FROM, UD_ARC_TO, UD_DEPREL)
         result["deps_ud"] = maybe_none(deps_ud_batched)
 
-    if EUD_DEPREL in columns:
-        deps_eud_batched = collate_syntax(EUD_ARC_FROM, EUD_ARC_TO, EUD_DEPREL)
-        result["deps_eud"] = maybe_none(deps_eud_batched)
-
     if MISC in columns:
         miscs_batched = stack_padded(MISC)
         result["miscs"] = maybe_none(miscs_batched)
-
-    if DEEPSLOT in columns:
-        deepslots_batched = stack_padded(DEEPSLOT)
-        result["deepslots"] = maybe_none(deepslots_batched)
-
-    if SEMCLASS in columns:
-        semclasses_batched = stack_padded(SEMCLASS)
-        result["semclasses"] = maybe_none(semclasses_batched)
 
     return result

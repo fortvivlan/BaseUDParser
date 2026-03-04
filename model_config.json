@@ -1,11 +1,7 @@
 {
-  "encoder_model_name": "distilbert-base-uncased",
-  "null_classifier_hidden_size": 512,
+  "encoder_model_name": "glot500-uralic-mlm-final",
   "lemma_classifier_hidden_size": 512,
   "morphology_classifier_hidden_size": 512,
   "dependency_classifier_hidden_size": 128,
-  "misc_classifier_hidden_size": 512,
-  "deepslot_classifier_hidden_size": 256,
-  "semclass_classifier_hidden_size": 512,
-  "consecutive_null_limit": 3
+  "misc_classifier_hidden_size": 512
 }

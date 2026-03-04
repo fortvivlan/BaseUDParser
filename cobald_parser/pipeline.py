@@ -73,14 +73,8 @@ class ConlluTokenClassificationPipeline(Pipeline):
                 optional_tags["joint_feats_ids"] = model_outputs["joint_feats"][i, :n_words].tolist()
             if "deps_ud" in model_outputs:
                 optional_tags["deps_ud"] = select_arcs(model_outputs["deps_ud"], i).tolist()
-            if "deps_eud" in model_outputs:
-                optional_tags["deps_eud"] = select_arcs(model_outputs["deps_eud"], i).tolist()
             if "miscs" in model_outputs:
                 optional_tags["misc_ids"] = model_outputs["miscs"][i, :n_words].tolist()
-            if "deepslots" in model_outputs:
-                optional_tags["deepslot_ids"] = model_outputs["deepslots"][i, :n_words].tolist()
-            if "semclasses" in model_outputs:
-                optional_tags["semclass_ids"] = model_outputs["semclasses"][i, :n_words].tolist()
 
             sentence_decoded = self._decode_sentence(
                 text=self._texts[i],
@@ -97,10 +91,7 @@ class ConlluTokenClassificationPipeline(Pipeline):
         lemma_rule_ids: list[int] = None,
         joint_feats_ids: list[int] = None,
         deps_ud: list[list[int]] = None,
-        deps_eud: list[list[int]] = None,
-        misc_ids: list[int] = None,
-        deepslot_ids: list[int] = None,
-        semclass_ids: list[int] = None
+        misc_ids: list[int] = None
     ) -> dict:
 
         # Enumerate words in the sentence, starting from 1.
@@ -150,44 +141,17 @@ class ConlluTokenClassificationPipeline(Pipeline):
                 deps_ud,
                 self.model.config.vocabulary["ud_deprel"]
             )
-        if deps_eud:
-            result["deps_eud"] = renumerate_and_decode_arcs(
-                deps_eud,
-                self.model.config.vocabulary["eud_deprel"]
-            )
         # Decode misc.
         if misc_ids:
             result["miscs"] = [
                 self.model.config.vocabulary["misc"][misc_id]
                 for misc_id in misc_ids
             ]
-        # Decode semantics.
-        if deepslot_ids:
-            result["deepslots"] = [
-                self.model.config.vocabulary["deepslot"][deepslot_id] 
-                for deepslot_id in deepslot_ids
-            ]
-        if semclass_ids:
-            result["semclasses"] = [
-                self.model.config.vocabulary["semclass"][semclass_id] 
-                for semclass_id in semclass_ids
-            ]
         return result
 
     @staticmethod
     def _enumerate_words(words: list[str]) -> list[str]:
-        ids = []
-        current_id = 0
-        current_null_count = 0
-        for word in words:
-            if word == "#NULL":
-                current_null_count += 1
-                ids.append(f"{current_id}.{current_null_count}")
-            else:
-                current_id += 1
-                current_null_count = 0
-                ids.append(f"{current_id}")
-        return ids
+        return [str(i + 1) for i in range(len(words))]
 
     @staticmethod
     def _format_as_conllu(sentences: list[dict]) -> str:
@@ -202,35 +166,25 @@ class ConlluTokenClassificationPipeline(Pipeline):
             id2idx = {token_id: idx for idx, token_id in enumerate(sentence['ids'])}
 
             # Basic syntax.
-            heads = [''] * len(id2idx)
-            deprels = [''] * len(id2idx)
+            heads = ['_'] * len(id2idx)
+            deprels = ['_'] * len(id2idx)
             if "deps_ud" in sentence:
                 for arc_from, arc_to, deprel in sentence['deps_ud']:
                     token_idx = id2idx[arc_to]
                     heads[token_idx] = arc_from
                     deprels[token_idx] = deprel
 
-            # Enhanced syntax.
-            deps_dicts = [{} for _ in range(len(id2idx))]
-            if "deps_eud" in sentence:
-                for arc_from, arc_to, deprel in sentence['deps_eud']:
-                    token_idx = id2idx[arc_to]
-                    deps_dicts[token_idx][arc_from] = deprel
-
             for idx, token_id in enumerate(sentence['ids']):
                 word = sentence['words'][idx]
-                lemma = sentence['lemmas'][idx] if "lemmas" in sentence else ''
-                upos = sentence['upos'][idx] if "upos" in sentence else ''
-                xpos = sentence['xpos'][idx] if "xpos" in sentence else ''
-                feats = sentence['feats'][idx] if "feats" in sentence else ''
-                deps = '|'.join(f"{head}:{rel}" for head, rel in deps_dicts[idx].items()) or '_'
-                misc = sentence['miscs'][idx] if "miscs" in sentence else ''
-                deepslot = sentence['deepslots'][idx] if "deepslots" in sentence else ''
-                semclass = sentence['semclasses'][idx] if "semclasses" in sentence else ''
+                lemma = sentence['lemmas'][idx] if "lemmas" in sentence else '_'
+                upos = sentence['upos'][idx] if "upos" in sentence else '_'
+                xpos = sentence['xpos'][idx] if "xpos" in sentence else '_'
+                feats = sentence['feats'][idx] if "feats" in sentence else '_'
+                misc = sentence['miscs'][idx] if "miscs" in sentence else '_'
                 # CoNLL-U columns
                 line = '\t'.join([
                     token_id, word, lemma, upos, xpos, feats, heads[idx],
-                    deprels[idx], deps, misc, deepslot, semclass
+                    deprels[idx], '_', misc
                 ])
                 lines.append(line)
             formatted.append('\n'.join(lines))
